@@ -1,0 +1,58 @@
+// ES Module version (for "type": "module")
+import fs from 'fs';
+import path from 'path';
+import { EventEmitter } from 'events';
+
+class Logger extends EventEmitter {
+  log(level, message) {
+    const entry = `[${new Date().toISOString()}] [${level.toUpperCase()}] ${message}`;
+    this.emit('log', entry);
+  }
+  info(msg) { this.log('info', msg); }
+  warn(msg) { this.log('warn', msg); }
+  error(msg) { this.log('error', msg); }
+}
+
+class ConsoleTransport {
+  constructor(logger) {
+    logger.on('log', entry => console.log(entry));
+  }
+}
+
+class FileTransport {
+  constructor(logger, { folder = 'logs', filename = 'app.log', maxSize = 50 * 1024 } = {}) {
+    this.folder = folder;
+    this.filename = filename;
+    this.maxSize = maxSize;
+    this.filePath = path.join(folder, filename);
+
+    if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
+
+    logger.on('log', entry => this.write(entry));
+  }
+
+  write(entry) {
+    const entrySize = Buffer.byteLength(entry + '\n');
+    let currentSize = 0;
+
+    if (fs.existsSync(this.filePath)) {
+      currentSize = fs.statSync(this.filePath).size;
+    }
+
+    if (currentSize + entrySize > this.maxSize) {
+      const newFile = path.join(this.folder, `${this.filename}.${Date.now()}`);
+      fs.renameSync(this.filePath, newFile);
+    }
+
+    fs.appendFileSync(this.filePath, entry + '\n');
+  }
+}
+
+// Usage
+const logger = new Logger();
+new ConsoleTransport(logger);
+new FileTransport(logger, { folder: 'logs', filename: 'app.log', maxSize: 50 * 1024 });
+
+logger.info('Server started');
+logger.warn('Disk almost full');
+logger.error('Unhandled exception');
